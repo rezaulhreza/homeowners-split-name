@@ -8,7 +8,7 @@ use Illuminate\Support\Str;
 
 class CsvParser
 {
-    const SEPARATORS = ['and', '&'];
+    public final const SEPARATORS = ['and', '&'];
 
     /**
      * Parses a CSV file containing a list of people's names
@@ -20,22 +20,14 @@ class CsvParser
      */
     public function parseCsv(string $filename): array
     {
-        $file = fopen($filename, 'r');
-        if (! $file) {
+        if (!is_readable($filename)) {
             throw new Exception("Could not open CSV file: $filename");
         }
 
-        $people = [];
-
-        while (($data = fgetcsv($file)) !== false) {
-            foreach ($this->parseName($data[0]) as $person) {
-                $people[] = $person;
-            }
-        }
-
-        fclose($file);
-
-        return $people;
+        return collect(file($filename))
+            ->map(fn ($row) => str_getcsv($row))
+            ->flatMap(fn ($row) => $this->parseName($row[0]))
+            ->all();
     }
 
     /**
@@ -65,7 +57,7 @@ class CsvParser
 
         // Check for "Mr and Mrs" or "Mr & Mrs" format
         if (
-            count($nameParts) >= 3
+            is_countable($nameParts) && count($nameParts) >= 3
             && in_array(Str::lower($nameParts[0]), $salutations)
             && in_array(Str::lower($nameParts[1]), self::SEPARATORS) && in_array(
                 Str::lower($nameParts[2]),
@@ -114,12 +106,12 @@ class CsvParser
         // Extract the last name.
         if ($nameSegments->count() > 4) {
             // "Mr and Mrs X Y" will be split into "Mr X Y" and "Mrs X Y"
-            $lastName = $nameSegments[$nameSegments->count() - 2].' '.$nameSegments[$nameSegments->count() - 1];
+            $lastName = $nameSegments[$nameSegments->count() - 2] . ' ' . $nameSegments[$nameSegments->count() - 1];
         } else {
             //Mr and Mrs X" will be split into "Mr X" and "Mrs X". X is the last name.
             $lastName = $nameSegments->pop();
         }
-        [$salutation, , $secondTitle] = $nameSegments->toArray();
+        [$salutation,, $secondTitle] = $nameSegments->toArray();
 
         // Create two separate names: one for each person. "Mr and Mrs X" will be split into "Mr X" and "Mrs X".
         $nameBeforeSeparator = Str::of("$salutation $lastName")->trim()->__toString();
